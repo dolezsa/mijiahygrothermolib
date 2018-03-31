@@ -53,13 +53,17 @@ class MijiaHygrothermo(object):
             p.withDelegate( delegate )
             p.writeCharacteristic(0x10, bytearray([1, 0]), True)
             while not delegate.received:
-                p.waitForNotifications(30.0)
+                p.waitForNotifications(1.0)
 
             self._temperature = delegate.temperature
             self._humidity = delegate.humidity
             return True
         except Exception as ex:
-            _LOGGER.error("Unexpected error: {}".format(ex))
+            if isinstance(ex, btle.BTLEException):
+                """ TODO retry..."""
+                _LOGGER.warning("BT connection error: {}".format(ex))
+            else:
+                _LOGGER.error("Unexpected error: {}".format(ex))
             return False
 
     @property
