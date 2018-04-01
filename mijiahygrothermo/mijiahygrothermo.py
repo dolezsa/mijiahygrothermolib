@@ -1,11 +1,29 @@
 from bluepy import btle
-from datetime import datetime
+from functools import wraps
 import logging
 import re
+import time
 
 _LOGGER = logging.getLogger(__name__)
 
 BATTERY_INTERVAL = 3600
+DATA_TIMEOUT = 3600
+
+def retry(method):
+    @wraps(method)
+    def wrapper_retry(self, p):
+        initial = time.monotonic()
+        while True:
+            if time.monotonic() - initial >= 10:
+                return None
+            try:
+                #print("try...")
+                return method(self, p)
+            except (AttributeError, btle.BTLEException):
+                _LOGGER.warning("Connection error for device {}."
+                                " Reconnecting...".format(self.address))
+                p.connect(self.address, iface = self.iface)
+    return wrapper_retry
 
 class XiomiHygroThermoDelegate(btle.DefaultDelegate):
     def __init__(self):
@@ -33,37 +51,64 @@ class MijiaHygrothermo(object):
         self._temperature = None
         self._humidity = None
 
-        self._last_battery = None
+        self.__last_battery = None
+        self.__last_data = None
+
+        self.__errorcnt = 0
 
     def __repr__(self):
         return "<MijiaHygrothermo '%s'>" (self.address)
 
+    @retry
+    def __name(self, p):
+        return ''.join(map(chr, p.readCharacteristic(0x3)))
+
+    @retry
+    def __firmware(self, p):
+        return ''.join(map(chr, p.readCharacteristic(0x24)))
+
+    @retry
+    def __battery(self, p):
+        return p.readCharacteristic(0x18)[0]
+
+    @retry
+    def __ht_data(self, p):
+        delegate = XiomiHygroThermoDelegate()
+        p.withDelegate(delegate)
+        p.writeCharacteristic(0x10, bytearray([1, 0]), True)
+        while not delegate.received:
+            p.waitForNotifications(1.0)
+        return delegate.temperature, delegate.humidity
+
     def read_data(self, devinfo = False):
         try:
             p = btle.Peripheral(self.address, iface = self.iface)
+            self.__errorcnt = 0
 
             if devinfo:
-                self._name = ''.join(map(chr, p.readCharacteristic(0x3)))
-                self._firmware = ''.join(map(chr, p.readCharacteristic(0x24)))
-            if self._last_battery is None or (datetime.utcnow() - self._last_battery).seconds >= BATTERY_INTERVAL:
-                self._battery = p.readCharacteristic(0x18)[0]
-                self._last_battery = datetime.utcnow()
+                self._name = self.__name(p)
+                self._firmware = self.__firmware(p)
 
-            delegate = XiomiHygroThermoDelegate()
-            p.withDelegate( delegate )
-            p.writeCharacteristic(0x10, bytearray([1, 0]), True)
-            while not delegate.received:
-                p.waitForNotifications(1.0)
+            if self.__last_battery is None or time.monotonic() - self.__last_battery >= BATTERY_INTERVAL:
+                self._battery = self.__battery(p)
+                self.__last_battery = time.monotonic()
 
-            self._temperature = delegate.temperature
-            self._humidity = delegate.humidity
+            data = self.__ht_data(p)
+            if data is not None:
+                self._temperature, self._humidity = data
+            else:
+                self._temperature = None
+                self._humidity = None
+
+            self.__last_data = time.monotonic()
             return True
         except Exception as ex:
             if isinstance(ex, btle.BTLEException):
-                """ TODO retry..."""
                 _LOGGER.warning("BT connection error: {}".format(ex))
             else:
                 _LOGGER.error("Unexpected error: {}".format(ex))
+
+            self.__errorcnt += 1
             return False
 
     @property
@@ -86,15 +131,19 @@ class MijiaHygrothermo(object):
 
     @property
     def temperature(self):
-        if self._temperature is None:
+        if self._temperature is None or time.monotonic() - self.__last_data >= DATA_TIMEOUT:
             self.read_data()
         return self._temperature
 
     @property
     def humidity(self):
-        if self._humidity is None:
+        if self._humidity is None or time.monotonic() - self.__last_data >= DATA_TIMEOUT:
             self.read_data()
         return self._humidity
+
+    @property
+    def errorcnt(self):
+        return self.__errorcnt
 
     @staticmethod
     def discover(iface = 0, timeout = 2):
