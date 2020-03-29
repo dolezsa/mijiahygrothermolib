@@ -3,6 +3,7 @@ from functools import wraps
 import logging
 import re
 import time
+import datetime
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -50,6 +51,8 @@ class MijiaHygrothermo(object):
         self._battery = None
         self._temperature = None
         self._humidity = None
+
+        self._read_timestamp = None
 
         self.__last_battery = None
         self.__last_data = None
@@ -100,7 +103,10 @@ class MijiaHygrothermo(object):
                 self._temperature = None
                 self._humidity = None
 
+            self._read_timestamp = datetime.datetime.now()
+
             self.__last_data = time.monotonic()
+
             return True
         except Exception as ex:
             if isinstance(ex, btle.BTLEException):
@@ -143,7 +149,9 @@ class MijiaHygrothermo(object):
 
     @property
     def last_data_read(self):
-        return self.__last_data
+        if self._read_timestamp is None:
+            return "N/A"
+        return self._read_timestamp
 
     @property
     def errorcnt(self):
