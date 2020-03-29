@@ -2,7 +2,7 @@ from mijiahygrothermo import MijiaHygrothermo
 
 for device in MijiaHygrothermo.discover():
     data = device.get_latest_properties()
-    print("- {}".format(data['address']))
+    print("- {}".format(data['macAddress']))
     print("  name: {}".format(data['name']))
     print("  firmware: {}".format(data['firmwareVersion']))
     print("  battery level: {}%".format(data['batteryPercentage']))
