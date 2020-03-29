@@ -1,10 +1,12 @@
 from mijiahygrothermo import MijiaHygrothermo
 
 for device in MijiaHygrothermo.discover():
-    print("- {}".format(device.address))
-    print("  name: {}".format(device.name))
-    print("  firmware: {}".format(device.firmware))
-    print("  battery level: {}%".format(device.battery))
-    print("  temperature: {}*C".format(device.temperature))
-    print("  humidity: {}%".format(device.humidity))
+    data = device.get_latest_properties()
+    print("- {}".format(data['address']))
+    print("  name: {}".format(data['name']))
+    print("  firmware: {}".format(data['firmwareVersion']))
+    print("  battery level: {}%".format(data['batteryPercentage']))
+    print("  temperature: {}*C".format(data['temperature']))
+    print("  humidity: {}%".format(data['humidity']))
+    print("  last data read: {}%".format(data['lastDataRead']))
     print()

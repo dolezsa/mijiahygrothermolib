@@ -142,8 +142,21 @@ class MijiaHygrothermo(object):
         return self._humidity
 
     @property
+    def last_data_read(self):
+        return self.__last_data
+
+    @property
     def errorcnt(self):
         return self.__errorcnt
+
+    def get_latest_properties(self):
+        return {'macAddress' : self.address,
+                'firmwareVersion': self.firmware(),
+                'batteryPercentage': self.battery(),
+                'name': self.name(),
+                'temperature': self.temperature(),
+                'humidity': self.humidity(),
+                'lastDataRead': self.last_data_read()}
 
     @staticmethod
     def discover(iface = 0, timeout = 2):
